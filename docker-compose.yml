@@ -1,0 +1,99 @@
+services:
+  # ─────────────────────────────────────────────
+  # Servicio 0: Redis (In-memory broker & cache)
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: always
+    expose:
+      - "6379"
+    volumes:
+      - nova-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Servicio 1: API Principal (FastAPI)
+  # ─────────────────────────────────────────────
+  nova-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    environment:
+      - EXECUTION_ROLE=api
+    volumes:
+      - nova-data:/app/data
+      - nova-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────
+  # Servicio 2: Worker RAG (Procesamiento de documentos)
+  # ─────────────────────────────────────────────
+  nova-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    command: python -m src.rag.worker
+    env_file:
+      - .env
+    environment:
+      - EXECUTION_ROLE=worker
+    volumes:
+      - nova-data:/app/data
+      - nova-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────
+  # Servicio 3: Worker Episodios Semánticos
+  # ─────────────────────────────────────────────
+  nova-episodes-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    command: python -m src.memory.episodes_worker
+    env_file:
+      - .env
+    environment:
+      - EXECUTION_ROLE=worker
+    volumes:
+      - nova-data:/app/data
+      - nova-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────
+  # Servicio 4: Dashboard Neural (Next.js)
+  # ─────────────────────────────────────────────
+  nova-dashboard:
+    build:
+      context: ./nova-dashboard
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: always
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - nova-api
+
+volumes:
+  nova-redis-data:
+  nova-data:
+  nova-logs:
