@@ -96,7 +96,7 @@ class _EmbeddingFn:
                 return OpenAIEmbeddings(
                     model=self.model,
                     api_key=_api_key,
-                    # Sin base_url — OpenAI directo, no OpenRouter
+                    base_url="https://api.openai.com/v1",  # Siempre OpenAI directo, NUNCA OpenRouter
                 ).embed_documents(text_list)
             except Exception as e:
                 log.error("OpenAI embedding failure", error=str(e))

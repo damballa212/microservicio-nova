@@ -209,11 +209,11 @@ class Settings(BaseSettings):
     pg_document_metadata_table: str = Field(
         default="document_metadata", description="Tabla de metadatos de documentos"
     )
-    embeddings_provider: Literal["openai", "google"] = Field(
-        default="openai", description="Proveedor de embeddings"
+    embeddings_provider: Literal["openai", "google", "cohere"] = Field(
+        default="google", description="Proveedor de embeddings (google=gratis, cohere=free tier, openai=pago directo)"
     )
     embeddings_model: str = Field(
-        default="text-embedding-3-small", description="Modelo de embeddings"
+        default="models/text-embedding-004", description="Modelo de embeddings"
     )
     cohere_api_key: str = Field(
         default="", validation_alias=AliasChoices("COHERE_API_KEY"), description="API Key Cohere"
