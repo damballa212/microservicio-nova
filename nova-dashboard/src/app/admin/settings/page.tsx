@@ -95,23 +95,22 @@ export default function SettingsPage() {
     };
 
     const handleUpdate = async (key: string, value: string) => {
-        setSaving(key);
+        // Optimistic update: actualiza local state inmediatamente
+        setConfigs(prev => {
+            const exists = prev.some(c => c.key === key);
+            if (exists) return prev.map(c => c.key === key ? { ...c, value } : c);
+            return [...prev, { key, value }];
+        });
+        // Fire API in background
         try {
-            await fetch(`${API_ENDPOINTS.CONFIG}/${key}`, {
+            const res = await fetch(`${API_ENDPOINTS.CONFIG}/${key}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ value }),
             });
-            // Upsert en local state: actualiza si ya existe, agrega si no
-            setConfigs(prev => {
-                const exists = prev.some(c => c.key === key);
-                if (exists) return prev.map(c => c.key === key ? { ...c, value } : c);
-                return [...prev, { key, value }];
-            });
+            if (!res.ok) console.error(`Config PATCH failed: ${res.status}`, await res.text());
         } catch (error) {
             console.error("Failed to save config", error);
-        } finally {
-            setSaving(null);
         }
     };
 
@@ -123,9 +122,12 @@ export default function SettingsPage() {
         setOpenModelModal(true);
     };
 
-    const handleModelSelect = async (modelId: string) => {
-        await handleUpdate(modelTargetKey, modelId);
+    const handleModelSelect = (modelId: string) => {
+        // Update local state + close modal immediately
+        handleUpdate(modelTargetKey, modelId);
         setOpenModelModal(false);
+        setSelectedProvider(null);
+        setSearchQuery("");
     };
 
     const handleTempSave = async () => {
