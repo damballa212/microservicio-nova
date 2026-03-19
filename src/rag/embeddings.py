@@ -13,11 +13,21 @@ class _EmbeddingFn:
         if p == "openai":
             try:
                 from langchain_openai import OpenAIEmbeddings
-
+                # Leer API key del admin panel primero
+                _api_key = settings.openai_api_key or None
+                _base_url = settings.openai_base_url or None
+                try:
+                    from src.models.admin import admin_repo, CredentialProvider
+                    cred = admin_repo.get_default_credential(CredentialProvider.OPENROUTER)
+                    if cred:
+                        _api_key, _base_url = cred
+                        _base_url = _base_url or "https://openrouter.ai/api/v1"
+                except Exception:
+                    pass
                 return OpenAIEmbeddings(
                     model=self.model,
-                    api_key=settings.openai_api_key or None,
-                    base_url=settings.openai_base_url or None,
+                    api_key=_api_key,
+                    base_url=_base_url,
                 ).embed_documents(list(texts))
             except Exception as e:
                 from src.utils.logger import get_logger

@@ -14,6 +14,19 @@ from src.utils.text import escape_curly
 logger = get_logger(__name__)
 
 
+def _get_db_credentials() -> tuple[str | None, str | None]:
+    """Obtiene API key y base_url del admin_repo (DB), con fallback a settings."""
+    try:
+        from src.models.admin import admin_repo, CredentialProvider
+        cred = admin_repo.get_default_credential(CredentialProvider.OPENROUTER)
+        if cred:
+            key, base_url = cred
+            return key, base_url or "https://openrouter.ai/api/v1"
+    except Exception:
+        pass
+    return settings.openai_api_key or None, settings.openai_base_url or None
+
+
 def _merge_actions(state: ChatbotState) -> dict[str, Any]:
     current = state.get("actions")
     if isinstance(current, dict):
@@ -194,13 +207,14 @@ async def classify_intent_llm(state: ChatbotState) -> ChatbotState:
     llm: Any
     provider = None
     model_id = None
-    if settings.openai_api_key:
+    _api_key, _base_url = _get_db_credentials()
+    if _api_key:
         provider = "openai"
         model_id = "openai/gpt-4.1-mini"
         llm = ChatOpenAI(
             model=model_id,
-            api_key=SecretStr(settings.openai_api_key),
-            base_url=settings.openai_base_url,
+            api_key=SecretStr(_api_key),
+            base_url=_base_url,
             temperature=0.0,
         )
     elif settings.google_api_key:
@@ -319,13 +333,14 @@ async def score_lead_llm(state: ChatbotState) -> ChatbotState:
     llm: Any
     provider = None
     model_id = None
-    if settings.openai_api_key:
+    _api_key, _base_url = _get_db_credentials()
+    if _api_key:
         provider = "openai"
         model_id = "openai/gpt-4.1-mini"
         llm = ChatOpenAI(
             model=model_id,
-            api_key=SecretStr(settings.openai_api_key),
-            base_url=settings.openai_base_url,
+            api_key=SecretStr(_api_key),
+            base_url=_base_url,
             temperature=0.0,
         )
     elif settings.google_api_key:
