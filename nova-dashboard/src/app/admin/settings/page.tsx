@@ -102,7 +102,12 @@ export default function SettingsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ value }),
             });
-            setConfigs(prev => prev.map(c => c.key === key ? { ...c, value } : c));
+            // Upsert en local state: actualiza si ya existe, agrega si no
+            setConfigs(prev => {
+                const exists = prev.some(c => c.key === key);
+                if (exists) return prev.map(c => c.key === key ? { ...c, value } : c);
+                return [...prev, { key, value }];
+            });
         } catch (error) {
             console.error("Failed to save config", error);
         } finally {
