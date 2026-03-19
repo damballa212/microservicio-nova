@@ -89,21 +89,24 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         []
     );
 
-    // Testing System Default Configuration
+    // Testing System Default Configuration — campos vacíos por defecto.
+    // El admin los configura desde el panel "SIMULATOR CONFIG" en la UI.
+    // NUNCA poner datos ficticios aquí para no confundir al bot con info inventada.
     const [verticalId, setVerticalId] = useState("restaurante");
     const [tenantData, setTenantData] = useState<Record<string, string>>({
-        nombre: "Restaurante Neural",
-        giro: "Comida Mediterránea Fusión",
-        tono: "Cercano y profesional",
-        ubicacion: "Av. Principal 123",
-        horarios: "12:00 - 22:00",
-        reglas_reserva: "Mínimo 2 personas",
-        google_sheet_id: "", // Empty by default
-        delivery_info: "Cobertura 5km",
-        metodos_pago: "Zelle, Efectivo",
-        oferta: "Pizza Trufada, Pasta al Pesto",
-        reglas: "No se admiten mascotas"
+        nombre: "",
+        giro: "",
+        tono: "",
+        ubicacion: "",
+        horarios: "",
+        reglas_reserva: "",
+        google_sheet_id: "",
+        delivery_info: "",
+        metodos_pago: "",
+        oferta: "",
+        reglas: ""
     });
+
 
     // Graph Data structure for ForceGraph
     const [graphData] = useState<{ nodes: Record<string, unknown>[]; links: Record<string, unknown>[] }>({ nodes: [], links: [] });
