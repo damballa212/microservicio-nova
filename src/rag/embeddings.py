@@ -55,4 +55,12 @@ class _EmbeddingFn:
 
 
 def get_embedding_fn() -> _EmbeddingFn:
-    return _EmbeddingFn(settings.embeddings_provider, settings.embeddings_model)
+    _model = settings.embeddings_model
+    try:
+        from src.models.admin import admin_repo
+        cfg = admin_repo.get_config("embeddings_model")
+        if cfg and cfg.value:
+            _model = cfg.value
+    except Exception:
+        pass
+    return _EmbeddingFn(settings.embeddings_provider, _model)

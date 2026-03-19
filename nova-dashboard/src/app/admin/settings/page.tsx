@@ -66,6 +66,7 @@ export default function SettingsPage() {
 
     // Model Selection Modal
     const [openModelModal, setOpenModelModal] = useState(false);
+    const [modelTargetKey, setModelTargetKey] = useState<string>("llm_model");
     const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -117,10 +118,11 @@ export default function SettingsPage() {
     };
 
     const handleModelSelect = async (modelId: string) => {
-        await handleUpdate("llm_model", modelId);
+        await handleUpdate(modelTargetKey, modelId);
         setOpenModelModal(false);
         setSelectedProvider(null);
         setSearchQuery("");
+        setModelTargetKey("llm_model");
     };
 
     const handleTempSave = async () => {
@@ -443,6 +445,53 @@ export default function SettingsPage() {
                                         </CardContent>
                                     </Card>
                                 </div>
+
+                                {/* Sub-Agent Models */}
+                                <Card className="bg-slate-900/50 border-slate-800">
+                                    <CardHeader className="pb-4">
+                                        <CardTitle className="text-white flex items-center gap-2">
+                                            <Zap className="w-5 h-5 text-yellow-400" />
+                                            Sub-Agent Models
+                                        </CardTitle>
+                                        <CardDescription className="text-slate-400 mt-1">
+                                            Models for classifier and embeddings. Leave empty to use the main model.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                                            <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
+                                                <Activity className="w-5 h-5" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-white">Classifier Model</p>
+                                                <p className="text-xs text-slate-500 font-mono truncate">
+                                                    {getConfigValue("classifier_model") || getConfigValue("llm_model") || "Using main model"}
+                                                </p>
+                                            </div>
+                                            <Button size="sm" variant="outline"
+                                                onClick={() => { setModelTargetKey("classifier_model"); setOpenModelModal(true); }}
+                                                className="border-slate-700 hover:bg-slate-800 shrink-0">
+                                                <Edit3 className="w-3 h-3 mr-1" />Change
+                                            </Button>
+                                        </div>
+                                        <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                                            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400">
+                                                <Gauge className="w-5 h-5" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-white">Embeddings Model</p>
+                                                <p className="text-xs text-slate-500 font-mono truncate">
+                                                    {getConfigValue("embeddings_model") || "text-embedding-3-small (default)"}
+                                                </p>
+                                            </div>
+                                            <Button size="sm" variant="outline"
+                                                onClick={() => { setModelTargetKey("embeddings_model"); setOpenModelModal(true); }}
+                                                className="border-slate-700 hover:bg-slate-800 shrink-0">
+                                                <Edit3 className="w-3 h-3 mr-1" />Change
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             </TabsContent>
 
                             {/* Credentials Tab */}

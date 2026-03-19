@@ -208,9 +208,18 @@ async def classify_intent_llm(state: ChatbotState) -> ChatbotState:
     provider = None
     model_id = None
     _api_key, _base_url = _get_db_credentials()
+    # Leer classifier_model configurado en admin panel, con fallback a llm_model y luego al default
+    _classifier_model = "openai/gpt-4.1-mini"
+    try:
+        from src.models.admin import admin_repo
+        cfg = admin_repo.get_config("classifier_model") or admin_repo.get_config("llm_model")
+        if cfg and cfg.value:
+            _classifier_model = cfg.value
+    except Exception:
+        pass
     if _api_key:
         provider = "openai"
-        model_id = "openai/gpt-4.1-mini"
+        model_id = _classifier_model
         llm = ChatOpenAI(
             model=model_id,
             api_key=SecretStr(_api_key),
@@ -334,9 +343,17 @@ async def score_lead_llm(state: ChatbotState) -> ChatbotState:
     provider = None
     model_id = None
     _api_key, _base_url = _get_db_credentials()
+    _classifier_model = "openai/gpt-4.1-mini"
+    try:
+        from src.models.admin import admin_repo
+        cfg = admin_repo.get_config("classifier_model") or admin_repo.get_config("llm_model")
+        if cfg and cfg.value:
+            _classifier_model = cfg.value
+    except Exception:
+        pass
     if _api_key:
         provider = "openai"
-        model_id = "openai/gpt-4.1-mini"
+        model_id = _classifier_model
         llm = ChatOpenAI(
             model=model_id,
             api_key=SecretStr(_api_key),
