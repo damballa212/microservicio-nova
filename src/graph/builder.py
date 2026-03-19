@@ -35,7 +35,7 @@ from src.nodes.formatter import format_response
 
 # Conocimiento (RAG/Sheets) ahora se invoca bajo demanda por el LLM vía herramientas
 from src.nodes.multimodal import process_multimodal
-from src.nodes.nlu import classify_intent_llm, score_lead_llm
+from src.nodes.nlu import classify_intent, score_lead  # heurísticas; el agente principal maneja intent/lead via JSON
 from src.nodes.outbound_webhook import post_to_outbound_webhook
 from src.nodes.validation import (
     check_bot_state,
@@ -190,11 +190,12 @@ def build_chatbot_graph() -> Any:
         "process_multimodal", wrap_node_with_events(process_multimodal, "process_multimodal")
     )
 
-    graph.add_node("classify_intent", wrap_node_with_events(classify_intent_llm, "classify_intent"))
+    # classify_intent: heurística rápida (sin LLM). El veredicto final de intent/lead
+    # viene dentro del JSON que retorna generate_response (campos nlu + actions).
+    graph.add_node("classify_intent", wrap_node_with_events(classify_intent, "classify_intent"))
 
-    # Conocimiento pre-LLM deshabilitado; el LLM solicitará herramientas si las necesita
-
-    graph.add_node("score_lead", wrap_node_with_events(score_lead_llm, "score_lead"))
+    # score_lead: reglas simples (sin LLM). El agente principal lo confirma en su JSON.
+    graph.add_node("score_lead", wrap_node_with_events(score_lead, "score_lead"))
 
     # Fase 4: IA
     graph.add_node(

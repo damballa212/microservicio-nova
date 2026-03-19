@@ -7,14 +7,7 @@ y ejecuta el proceso de escalamiento si es necesario.
 
 from typing import Any, Literal
 
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
-
 from src.config.constants import EscalationMessages, EscalationResponse
-from src.config.prompts import CLASSIFIER_PROMPT
-from src.config.settings import settings
 from src.models.state import ChatbotState
 from src.nodes.decorators import handle_node_errors
 from src.utils.logger import get_logger
@@ -27,170 +20,57 @@ async def classify_escalation(state: ChatbotState) -> ChatbotState:
     """
     Clasifica si la conversación requiere escalamiento humano.
 
-    Corresponde al nodo 'Text Classifier' del workflow de n8n.
-    Analiza el chat_input para determinar si se necesita
-    intervención humana.
+    SIN LLAMADA LLM: usa el flag `requires_human` que ya retorna generate_response
+    en su JSON, más un heurístico de palabras clave como safety net.
 
-    Args:
-        state: Estado actual del grafo
-
-    Returns:
-        Estado con needs_escalation actualizado
+    El agente principal tiene todo el contexto para decidir escalamiento.
+    Una segunda llamada LLM aquí sería redundante y cara.
     """
-    chat_input = state.get("chat_input", "")
-    ai_response = state.get("ai_response", "")
+    state["_node_metrics"] = {
+        "provider": "heuristic",
+        "model_id": None,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cost_usd": 0.0,
+    }
 
+    # 1. Gating forzado desde CRM — máxima prioridad
     if state.get("gating_escalate"):
         state["needs_escalation"] = True
         state["escalation_reason"] = "Escalamiento forzado por CRM"
-        state["_node_metrics"] = {
-            "provider": None,
-            "model_id": None,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_tokens": 0,
-            "cost_usd": 0.0,
-        }
-        return state
-    if not chat_input:
-        state["needs_escalation"] = False
         return state
 
-    logger.debug("Clasificando necesidad de escalamiento")
+    # 2. El agente principal ya marcó requires_human=true en su respuesta JSON
+    #    generate_response() setea needs_escalation=True si el JSON del LLM lo indica.
+    if state.get("needs_escalation"):
+        if not state.get("escalation_reason"):
+            state["escalation_reason"] = "model_flagged"
+        logger.info("Escalamiento marcado por el agente principal", reason=state["escalation_reason"])
+        return state
 
-    try:
-        llm: Any
-        if settings.openai_api_key:
-            llm = ChatOpenAI(
-                model="openai/gpt-4.1-mini",
-                api_key=SecretStr(settings.openai_api_key),
-                base_url=settings.openai_base_url,
-                temperature=0.0,
-            )
-        elif settings.google_api_key:
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",
-                google_api_key=settings.google_api_key,
-                temperature=0.0,
-            )
-        else:
-            state["needs_escalation"] = False
-            return state
+    # 3. Heurístico de palabras clave como safety net (sin LLM, gratis)
+    chat_input = (state.get("chat_input") or "").lower()
+    ESCALATION_KEYWORDS = {
+        # Solicitud explícita de humano
+        "quiero hablar con", "hablar con un agente", "hablar con una persona",
+        "atención humana", "atiéndeme tú", "pon a alguien", "necesito a alguien",
+        "llamar a un asesor", "llamar a un humano",
+        # Frustración extrema
+        "esto es una mierda", "qué asco de servicio", "pésimo servicio",
+        "voy a denunciar", "voy a poner queja", "fraude", "me estafaron",
+        # Emergencias
+        "emergencia", "urgente", "accidente", "herido", "hospital",
+    }
+    if any(kw in chat_input for kw in ESCALATION_KEYWORDS):
+        state["needs_escalation"] = True
+        state["escalation_reason"] = "keyword_detected"
+        logger.info("Escalamiento por palabra clave detectada")
+        return state
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", CLASSIFIER_PROMPT),
-                (
-                    "human",
-                    """
-Mensaje del usuario:
-{chat_input}
-
-Respuesta del bot:
-{ai_response}
-
-¿Requiere atención humana? Responde SOLO "SI" o "NO".
-""",
-                ),
-            ]
-        )
-
-        chain = prompt | llm
-
-        response = await chain.ainvoke(
-            {
-                "chat_input": chat_input,
-                "ai_response": ai_response,
-            }
-        )
-
-        usage = None
-        try:
-            usage = getattr(response, "usage_metadata", None)
-            if not usage and hasattr(response, "response_metadata"):
-                meta = response.response_metadata or {}
-                usage = meta.get("token_usage") or meta.get("usage")
-        except Exception:
-            usage = None
-
-        input_tokens = None
-        output_tokens = None
-        total_tokens = None
-        if isinstance(usage, dict):
-            input_tokens = (
-                usage.get("input_tokens")
-                or usage.get("prompt_tokens")
-                or usage.get("prompt_token_count")
-                or usage.get("input_token_count")
-            )
-            output_tokens = (
-                usage.get("output_tokens")
-                or usage.get("completion_tokens")
-                or usage.get("candidates_token_count")
-                or usage.get("output_token_count")
-            )
-            total_tokens = usage.get("total_tokens") or usage.get("total_token_count")
-        else:
-            try:
-                prompt_text = f"{chat_input}\n{ai_response}"
-                approx = int(len(prompt_text) / 4)
-                input_tokens = int(len(chat_input or "") / 4)
-                output_tokens = approx - (input_tokens or 0)
-            except Exception:
-                input_tokens = None
-                output_tokens = None
-        if total_tokens is None and (input_tokens is not None or output_tokens is not None):
-            total_tokens = (input_tokens or 0) + (output_tokens or 0)
-
-        provider = (
-            "openrouter"
-            if settings.openai_api_key
-            else ("gemini" if settings.google_api_key else None)
-        )
-        model_id = None
-        if provider == "openrouter":
-            model_id = "openai/gpt-4.1-mini"
-        elif provider == "gemini":
-            model_id = "gemini-1.5-flash"
-
-        state["_node_metrics"] = {
-            "provider": provider,
-            "model_id": model_id,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "total_tokens": total_tokens,
-            "cost_usd": None,
-        }
-
-        content = response.content
-        if isinstance(content, str):
-            result = content.strip().upper()
-        elif isinstance(content, list):
-            parts: list[str] = []
-            for item in content:
-                if isinstance(item, str):
-                    parts.append(item)
-                elif isinstance(item, dict):
-                    t = item.get("text")
-                    if isinstance(t, str):
-                        parts.append(t)
-            result = " ".join(parts).strip().upper()
-        else:
-            result = str(content).strip().upper()
-        needs_escalation = result == "SI" or result == "SÍ"
-
-        state["needs_escalation"] = needs_escalation
-
-        logger.info(
-            "Clasificación de escalamiento completada",
-            needs_escalation=needs_escalation,
-            raw_result=result,
-        )
-
-    except Exception as e:
-        logger.error("Error en clasificación", error=str(e))
-        state["needs_escalation"] = False
-
+    # 4. Sin escalamiento
+    state["needs_escalation"] = False
+    logger.debug("Sin escalamiento requerido")
     return state
 
 
