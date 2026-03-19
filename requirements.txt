@@ -4,6 +4,7 @@ langchain>=0.2.0
 langchain-google-genai>=1.0.0
 langchain-openai>=0.1.0
 langchain-community>=0.2.0
+langchain-cohere>=0.3.0
 
 # Web Framework
 fastapi>=0.109.0

@@ -1,6 +1,27 @@
+"""
+Embeddings module — soporta Google Gemini (gratis), Cohere (gratis), y OpenAI directo.
+OpenRouter NO soporta embeddings así que no se usa aquí.
+"""
 from collections.abc import Iterable
 
 from src.config.settings import settings
+
+
+def _get_embedding_config() -> tuple[str, str]:
+    """Lee embeddings_provider y embeddings_model de admin DB, fallback a settings."""
+    provider = settings.embeddings_provider or "google"
+    model = settings.embeddings_model or "models/text-embedding-004"
+    try:
+        from src.models.admin import admin_repo
+        cfg_provider = admin_repo.get_config("embeddings_provider")
+        cfg_model = admin_repo.get_config("embeddings_model")
+        if cfg_provider and cfg_provider.value:
+            provider = cfg_provider.value
+        if cfg_model and cfg_model.value:
+            model = cfg_model.value
+    except Exception:
+        pass
+    return provider, model
 
 
 class _EmbeddingFn:
@@ -9,44 +30,78 @@ class _EmbeddingFn:
         self.model = model
 
     def embed_documents(self, texts: Iterable[str]) -> list[list[float]]:
+        from src.utils.logger import get_logger
+        log = get_logger(__name__)
+        text_list = list(texts)
         p = self.provider
-        if p == "openai":
-            try:
-                from langchain_openai import OpenAIEmbeddings
-                # Leer API key del admin panel primero
-                _api_key = settings.openai_api_key or None
-                _base_url = settings.openai_base_url or None
-                try:
-                    from src.models.admin import admin_repo, CredentialProvider
-                    cred = admin_repo.get_default_credential(CredentialProvider.OPENROUTER)
-                    if cred:
-                        _api_key, _base_url = cred
-                        _base_url = _base_url or "https://openrouter.ai/api/v1"
-                except Exception:
-                    pass
-                return OpenAIEmbeddings(
-                    model=self.model,
-                    api_key=_api_key,
-                    base_url=_base_url,
-                ).embed_documents(list(texts))
-            except Exception as e:
-                from src.utils.logger import get_logger
-                get_logger(__name__).error("OpenAI embedding failure", error=str(e))
-                return []
+
+        # ── Google Gemini (gratis) ──────────────────────────────────────────
         if p == "google":
             try:
                 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
+                # Leer Google API key desde admin panel
+                _api_key = settings.google_api_key or None
+                try:
+                    from src.models.admin import admin_repo, CredentialProvider
+                    cred = admin_repo.get_default_credential(CredentialProvider.GOOGLE)
+                    if cred:
+                        _api_key = cred[0]
+                except Exception:
+                    pass
                 return GoogleGenerativeAIEmbeddings(
                     model=self.model,
-                    google_api_key=settings.google_api_key or None
-                ).embed_documents(
-                    list(texts)
-                )
+                    google_api_key=_api_key,
+                ).embed_documents(text_list)
             except Exception as e:
-                from src.utils.logger import get_logger
-                get_logger(__name__).error("Google embedding failure", error=str(e))
+                log.error("Google embedding failure", error=str(e))
                 return []
+
+        # ── Cohere (free tier) ─────────────────────────────────────────────
+        if p == "cohere":
+            try:
+                from langchain_cohere import CohereEmbeddings
+                _api_key = None
+                try:
+                    from src.models.admin import admin_repo, CredentialProvider
+                    cred = admin_repo.get_default_credential(CredentialProvider.COHERE)
+                    if cred:
+                        _api_key = cred[0]
+                except Exception:
+                    pass
+                if not _api_key:
+                    import os
+                    _api_key = os.environ.get("COHERE_API_KEY")
+                return CohereEmbeddings(
+                    model=self.model,
+                    cohere_api_key=_api_key,
+                ).embed_documents(text_list)
+            except Exception as e:
+                log.error("Cohere embedding failure", error=str(e))
+                return []
+
+        # ── OpenAI directo (NO OpenRouter) ─────────────────────────────────
+        if p == "openai":
+            try:
+                from langchain_openai import OpenAIEmbeddings
+                _api_key = None
+                try:
+                    from src.models.admin import admin_repo, CredentialProvider
+                    cred = admin_repo.get_default_credential(CredentialProvider.OPENAI)
+                    if cred:
+                        _api_key = cred[0]
+                except Exception:
+                    pass
+                if not _api_key:
+                    _api_key = settings.openai_api_key or None
+                return OpenAIEmbeddings(
+                    model=self.model,
+                    api_key=_api_key,
+                    # Sin base_url — OpenAI directo, no OpenRouter
+                ).embed_documents(text_list)
+            except Exception as e:
+                log.error("OpenAI embedding failure", error=str(e))
+                return []
+
         return []
 
     def embed_query(self, text: str) -> list[float]:
@@ -55,12 +110,5 @@ class _EmbeddingFn:
 
 
 def get_embedding_fn() -> _EmbeddingFn:
-    _model = settings.embeddings_model
-    try:
-        from src.models.admin import admin_repo
-        cfg = admin_repo.get_config("embeddings_model")
-        if cfg and cfg.value:
-            _model = cfg.value
-    except Exception:
-        pass
-    return _EmbeddingFn(settings.embeddings_provider, _model)
+    provider, model = _get_embedding_config()
+    return _EmbeddingFn(provider, model)

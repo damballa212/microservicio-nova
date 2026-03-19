@@ -74,6 +74,9 @@ export default function SettingsPage() {
     const [openTokensModal, setOpenTokensModal] = useState(false);
     const [tokensValue, setTokensValue] = useState(4096);
 
+    // Embeddings modal — modal propio con opciones de embedding (no chat models)
+    const [openEmbeddingsModal, setOpenEmbeddingsModal] = useState(false);
+
     useEffect(() => { fetchConfigs(); }, []);
 
     const fetchConfigs = async () => {
@@ -142,6 +145,12 @@ export default function SettingsPage() {
 
     const getConfigValue = (key: string) => configs.find(c => c.key === key)?.value || "";
 
+    const selectEmbeddingModel = (provider: string, model: string) => {
+        handleUpdate("embeddings_provider", provider);
+        handleUpdate("embeddings_model", model);
+        setOpenEmbeddingsModal(false);
+    };
+
     const getFilteredModels = () => {
         if (!selectedProvider) return [];
         const models = getModelsByProvider(selectedProvider.id);
@@ -196,8 +205,9 @@ export default function SettingsPage() {
             description: "Semantic memory & RAG",
             icon: <Gauge className="w-4 h-4" />,
             color: "bg-cyan-500/10 text-cyan-400",
-            value: currentEmbeddings || "text-embedding-3-small",
-            badge: !currentEmbeddings ? "Default" : undefined,
+            value: getConfigValue("embeddings_model") || "models/text-embedding-004",
+            badge: !getConfigValue("embeddings_model") ? "Default" : undefined,
+            isEmbeddings: true,
         },
     ];
 
@@ -249,7 +259,7 @@ export default function SettingsPage() {
                                                 AI Models
                                             </CardTitle>
                                             <CardDescription className="text-slate-400 mt-1">
-                                                300+ models via OpenRouter — configure each agent independently
+                                                Main Chat & Classifier via OpenRouter · Embeddings via Google/Cohere/OpenAI
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -283,7 +293,10 @@ export default function SettingsPage() {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                onClick={() => openModelPicker(row.key, row.label)}
+                                                onClick={() => (row as any).isEmbeddings
+                                                    ? setOpenEmbeddingsModal(true)
+                                                    : openModelPicker(row.key, row.label)
+                                                }
                                                 className="shrink-0 border-slate-700 hover:bg-indigo-600 hover:border-indigo-600 hover:text-white transition-all"
                                             >
                                                 <Edit3 className="w-3 h-3 mr-1" />Change
@@ -562,6 +575,111 @@ export default function SettingsPage() {
                             Save
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* EMBEDDINGS MODEL MODAL — solo proveedores de embeddings reales */}
+            <Dialog open={openEmbeddingsModal} onOpenChange={setOpenEmbeddingsModal}>
+                <DialogContent className="sm:max-w-[600px] bg-slate-950 border-slate-800 text-white p-0 overflow-hidden">
+                    <DialogHeader className="px-6 py-4 border-b border-slate-800 bg-slate-900/50">
+                        <DialogTitle className="flex items-center gap-2">
+                            <Gauge className="w-5 h-5 text-cyan-400" />
+                            Select Embeddings Model
+                        </DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                            OpenRouter no soporta embeddings. Usa Google (gratis), Cohere (free tier) u OpenAI directo.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-6 space-y-4">
+                        {/* Google Gemini — GRATIS */}
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 px-1 mb-2">
+                                <span className="text-lg">🔵</span>
+                                <span className="text-sm font-semibold text-white">Google Gemini</span>
+                                <Badge className="bg-green-500/20 text-green-400 border-0 text-[10px]">Gratis</Badge>
+                            </div>
+                            {[
+                                { model: "models/text-embedding-004", label: "text-embedding-004", desc: "768 dims · Último modelo · Recomendado" },
+                                { model: "models/embedding-001", label: "embedding-001", desc: "768 dims · Modelo legacy" },
+                            ].map(({ model, label, desc }) => {
+                                const isActive = getConfigValue("embeddings_model") === model && getConfigValue("embeddings_provider") === "google";
+                                return (
+                                    <button key={model} onClick={() => selectEmbeddingModel("google", model)}
+                                        className={cn("w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                                            isActive ? "bg-cyan-500/10 border-cyan-500/30" : "bg-slate-900/50 border-slate-700/50 hover:border-slate-600")}>
+                                        <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center shrink-0",
+                                            isActive ? "bg-cyan-500 border-cyan-500" : "border-slate-600")}>
+                                            {isActive && <Check className="w-3 h-3 text-black" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-white">{label}</p>
+                                            <p className="text-xs text-slate-500">{desc}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Cohere — FREE TIER */}
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 px-1 mb-2">
+                                <span className="text-lg">🟠</span>
+                                <span className="text-sm font-semibold text-white">Cohere</span>
+                                <Badge className="bg-amber-500/20 text-amber-400 border-0 text-[10px]">Free tier · 1k/mes</Badge>
+                            </div>
+                            {[
+                                { model: "embed-multilingual-v3.0", label: "embed-multilingual-v3.0", desc: "1024 dims · Multilingüe · Mejor calidad" },
+                                { model: "embed-multilingual-light-v3.0", label: "embed-multilingual-light-v3.0", desc: "384 dims · Multilingüe · Más rápido" },
+                                { model: "embed-english-v3.0", label: "embed-english-v3.0", desc: "1024 dims · Solo inglés" },
+                            ].map(({ model, label, desc }) => {
+                                const isActive = getConfigValue("embeddings_model") === model && getConfigValue("embeddings_provider") === "cohere";
+                                return (
+                                    <button key={model} onClick={() => selectEmbeddingModel("cohere", model)}
+                                        className={cn("w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                                            isActive ? "bg-amber-500/10 border-amber-500/30" : "bg-slate-900/50 border-slate-700/50 hover:border-slate-600")}>
+                                        <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center shrink-0",
+                                            isActive ? "bg-amber-500 border-amber-500" : "border-slate-600")}>
+                                            {isActive && <Check className="w-3 h-3 text-black" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-white">{label}</p>
+                                            <p className="text-xs text-slate-500">{desc}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* OpenAI Directo */}
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 px-1 mb-2">
+                                <span className="text-lg">⚫</span>
+                                <span className="text-sm font-semibold text-white">OpenAI Directo</span>
+                                <Badge className="bg-slate-700 text-slate-400 border-0 text-[10px]">Pago · API key OpenAI</Badge>
+                            </div>
+                            {[
+                                { model: "text-embedding-3-small", label: "text-embedding-3-small", desc: "1536 dims · Más económico" },
+                                { model: "text-embedding-3-large", label: "text-embedding-3-large", desc: "3072 dims · Mayor precisión" },
+                                { model: "text-embedding-ada-002", label: "text-embedding-ada-002", desc: "1536 dims · Legacy" },
+                            ].map(({ model, label, desc }) => {
+                                const isActive = getConfigValue("embeddings_model") === model && getConfigValue("embeddings_provider") === "openai";
+                                return (
+                                    <button key={model} onClick={() => selectEmbeddingModel("openai", model)}
+                                        className={cn("w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                                            isActive ? "bg-slate-500/10 border-slate-500/30" : "bg-slate-900/50 border-slate-700/50 hover:border-slate-600")}>
+                                        <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center shrink-0",
+                                            isActive ? "bg-slate-400 border-slate-400" : "border-slate-600")}>
+                                            {isActive && <Check className="w-3 h-3 text-black" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-white">{label}</p>
+                                            <p className="text-xs text-slate-500">{desc}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
