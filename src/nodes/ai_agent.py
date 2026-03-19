@@ -152,10 +152,28 @@ async def generate_response(state: ChatbotState) -> ChatbotState:
         if model_config:
             logger.debug(f"Using dynamic model: {model_id} (temp={temperature})")
         
+        # === 3. OBTENER API KEY (DB primero, .env como fallback) ===
+        _api_key = None
+        _base_url = None
+        try:
+            from src.models.admin import CredentialProvider
+            cred = admin_repo.get_default_credential(CredentialProvider.OPENROUTER)
+            if cred:
+                _api_key, _base_url = cred
+                _base_url = _base_url or "https://openrouter.ai/api/v1"
+                logger.debug("Usando credencial OpenRouter desde DB")
+        except Exception as e:
+            logger.debug("No se pudo obtener credencial desde DB, usando .env", error=str(e))
+
+        if not _api_key:
+            _api_key = settings.openai_api_key
+            _base_url = settings.openai_base_url
+            logger.debug("Usando credencial desde .env")
+
         llm = ChatOpenAI(
             model=model_id,
-            api_key=SecretStr(settings.openai_api_key),
-            base_url=settings.openai_base_url,
+            api_key=SecretStr(_api_key),
+            base_url=_base_url,
             temperature=temperature,
             model_kwargs=mk,
         )

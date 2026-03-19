@@ -539,5 +539,9 @@ async def clear_test_memory(session_id: str):
 @test_router.get("/memory/{session_id}")
 async def get_test_memory(session_id: str):
     """Obtiene el historial de una sesión."""
-    history = await conversation_memory.get_history(session_id)
+    try:
+        history = await conversation_memory.get_history(session_id)
+    except Exception as e:
+        logger.warning("No se pudo obtener historial (Redis no disponible?)", error=str(e))
+        history = []
     return {"session_id": session_id, "history": history}

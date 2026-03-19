@@ -300,22 +300,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configurar CORS - restringido en producción
-# Configurar CORS - restringido en producción
-cors_origins = ["*"] if settings.is_development else [
-    "https://flowify.ai",
-    "https://app.flowify.ai",
-    "https://dashboard.flowify.ai",
-]
-
-# Agregar orígenes configurados dinámicamente
+# Configurar CORS - 100% dinámico desde variables de entorno
 if settings.cors_allowed_origins:
-    extra_origins = [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
-    cors_origins.extend(extra_origins)
-elif settings.is_production:
-    # Fallback para permitir Easypanel si no se configuró explícitamente y estamos en prod
-    # (Esto ayuda a diagnósticos rápidos si el usuario olvida configurar la ENV)
-    pass
+    cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+else:
+    cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -323,6 +313,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Exception handler global - garantiza CORS headers incluso en errores 500
+# Starlette's ServerErrorMiddleware los omite en excepciones no manejadas
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if cors_origins == ["*"] or origin in cors_origins:
+        headers["Access-Control-Allow-Origin"] = origin or "*"
+        headers["Access-Control-Allow-Credentials"] = "true"
+    logger.error("Unhandled exception", path=str(request.url), error=str(exc))
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers=headers,
+    )
 
 # Registrar routers
 app.include_router(router)
