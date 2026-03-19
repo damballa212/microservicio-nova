@@ -1,23 +1,5 @@
 services:
   # ─────────────────────────────────────────────
-  # Servicio 0: Redis (In-memory broker & cache)
-  # ─────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    restart: always
-    labels:
-      - "nova.noauth=true"
-    expose:
-      - "6379"
-    volumes:
-      - nova-redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ─────────────────────────────────────────────
   # Servicio 1: API Principal (FastAPI)
   # ─────────────────────────────────────────────
   nova-api:
@@ -34,9 +16,6 @@ services:
     volumes:
       - nova-data:/app/data
       - nova-logs:/app/logs
-    depends_on:
-      redis:
-        condition: service_healthy
 
   # ─────────────────────────────────────────────
   # Servicio 2: Worker RAG (Procesamiento de documentos)
@@ -54,9 +33,6 @@ services:
     volumes:
       - nova-data:/app/data
       - nova-logs:/app/logs
-    depends_on:
-      redis:
-        condition: service_healthy
 
   # ─────────────────────────────────────────────
   # Servicio 3: Worker Episodios Semánticos
@@ -74,9 +50,6 @@ services:
     volumes:
       - nova-data:/app/data
       - nova-logs:/app/logs
-    depends_on:
-      redis:
-        condition: service_healthy
 
   # ─────────────────────────────────────────────
   # Servicio 4: Dashboard Neural (Next.js)
@@ -96,6 +69,5 @@ services:
       - nova-api
 
 volumes:
-  nova-redis-data:
   nova-data:
   nova-logs:
